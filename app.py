@@ -13,7 +13,7 @@ import settings as cfg
 from camera import Camera, generate_stream
 from detector import MotionDetector
 from timelapse import TimelapseCapturer, build_video, TIMELAPSE_DIR
-from slowmo import SLOWMO_DIR
+from slowmo import SLOWMO_DIR, is_capturing
 from cleanup import DiskCleaner, disk_usage
 from daynight import DayNightManager
 from backup import BackupScheduler, run_backup
@@ -289,6 +289,11 @@ def slowmo_video(filename):
     if not path.exists() or path.suffix != ".mp4":
         abort(404)
     return send_file(path, mimetype="video/mp4")
+
+
+@app.route("/api/slowmo-status")
+def slowmo_status():
+    return jsonify({"capturing": is_capturing()})
 
 
 @app.route("/timelapse/build", methods=["POST"])

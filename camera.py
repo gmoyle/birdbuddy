@@ -37,6 +37,8 @@ class Camera:
         self.available = False
         self._capture_thread = None
         self._stop = threading.Event()
+        self._paused = threading.Event()   # set = encode loop should idle
+        self._loop_idle = threading.Event()  # set = encode loop confirmed idle
         self._try_init()
 
     def _try_init(self):
@@ -62,6 +64,11 @@ class Camera:
         import logging
         log = logging.getLogger("birdbuddy")
         while not self._stop.is_set():
+            if self._paused.is_set():
+                self._loop_idle.set()
+                time.sleep(0.05)
+                continue
+            self._loop_idle.clear()
             try:
                 arr = self.cam.capture_array("main")
                 img = Image.fromarray(arr[:, :, ::-1], mode="RGB")
@@ -81,12 +88,23 @@ class Camera:
                 time.sleep(1)
         time.sleep(0.1)
 
+    def pause_for_slowmo(self, timeout=2.0):
+        """Pause the encode loop and wait until it's idle. Camera stays streaming last frame."""
+        self._loop_idle.clear()
+        self._paused.set()
+        self._loop_idle.wait(timeout=timeout)
+
+    def resume_from_slowmo(self):
+        """Resume the encode loop after slow-mo capture."""
+        self._paused.clear()
+
     def start(self):
         if not self.available:
             return
         self.cam.start()
         time.sleep(2)
         self._stop.clear()
+        self._paused.clear()
         self._capture_thread = threading.Thread(target=self._encode_loop, daemon=True)
         self._capture_thread.start()
 

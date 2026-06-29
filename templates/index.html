@@ -406,6 +406,19 @@
       #sheetBtn { display: none !important; }
     }
   </style>
+  #slowmo-banner {
+    display: none;
+    background: #e65100;
+    color: #fff;
+    text-align: center;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
 </head>
 <body>
   <header>
@@ -429,6 +442,7 @@
       <span class="nav-icon">⛶</span><span class="nav-label">⛶ Fullscreen</span>
     </button>
   </header>
+  <div id="slowmo-banner">📹 Capturing high-speed video…</div>
 
   <div class="stream-pane">
     <img id="streamImg" alt="Live feed">
@@ -793,6 +807,16 @@
       if (!document.hidden) _si.src = _streamUrl();
     });
   }
+
+  // Slow-mo capture banner
+  (function() {
+    const banner = document.getElementById('slowmo-banner');
+    setInterval(() => {
+      fetch('/api/slowmo-status').then(r => r.json()).then(d => {
+        banner.style.display = d.capturing ? 'block' : 'none';
+      }).catch(() => {});
+    }, 1000);
+  })();
   </script>
 </body>
 </html>
