@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+venv/
+captures/
+thumbnails/
+timelapse/
+slowmo/
+logs/
+models/
+settings.json
+hailort.log
+*.log

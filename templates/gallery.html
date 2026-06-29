@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BirdBuddy — Gallery</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #1a1a1a; color: #e0e0e0; font-family: system-ui, sans-serif; }
+
+    header {
+      background: #111;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid #333;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 600; flex: 1; }
+    .back-btn {
+      background: none;
+      border: 1px solid #444;
+      color: #aaa;
+      border-radius: 5px;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      text-decoration: none;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .back-btn:hover { border-color: #aaa; color: #fff; }
+
+    .filter-bar {
+      padding: 12px 20px;
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid #2a2a2a;
+    }
+    .filter-btn {
+      padding: 5px 14px;
+      border-radius: 20px;
+      border: 1px solid #444;
+      background: none;
+      color: #aaa;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .filter-btn.active { background: #4caf50; border-color: #4caf50; color: #fff; }
+    .filter-btn:hover:not(.active) { border-color: #aaa; color: #fff; }
+
+    .stats { padding: 0 20px 0; font-size: 0.75rem; color: #555; line-height: 2; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 8px;
+      padding: 12px 20px;
+    }
+
+    .card {
+      position: relative;
+      background: #222;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: border-color 0.15s, transform 0.1s;
+      aspect-ratio: 16/9;
+    }
+    .card:hover { border-color: #4caf50; transform: scale(1.02); }
+    .card.bird { border-color: #2e7d32; }
+    .card.bird:hover { border-color: #4caf50; }
+
+    .card img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      background: #111;
+    }
+
+    .card .overlay {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: linear-gradient(transparent, rgba(0,0,0,0.85));
+      padding: 20px 8px 6px;
+    }
+    .card .species {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: #4caf50;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .card .time {
+      font-size: 0.65rem;
+      color: #aaa;
+    }
+
+    .load-more {
+      display: block;
+      margin: 20px auto 40px;
+      padding: 10px 32px;
+      background: none;
+      border: 1px solid #444;
+      color: #aaa;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .load-more:hover { border-color: #aaa; color: #fff; }
+    .load-more:disabled { opacity: 0.3; cursor: default; }
+
+    /* Lightbox */
+    .lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.92);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .lightbox.open { display: flex; }
+    .lightbox img { max-width: 92vw; max-height: 82vh; object-fit: contain; border-radius: 4px; }
+    .lightbox .lb-info { color: #ccc; font-size: 0.9rem; text-align: center; line-height: 1.6; }
+    .lightbox .lb-info .lb-species { color: #4caf50; font-weight: 600; }
+    .lb-close {
+      position: absolute;
+      top: 16px; right: 20px;
+      background: none; border: none;
+      color: #aaa; font-size: 1.5rem;
+      cursor: pointer;
+    }
+    .lb-nav {
+      position: absolute;
+      top: 50%; transform: translateY(-50%);
+      background: rgba(0,0,0,0.5);
+      border: none;
+      color: #fff;
+      font-size: 1.8rem;
+      padding: 12px 16px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .lb-nav.prev { left: 12px; }
+    .lb-nav.next { right: 12px; }
+    .lb-nav:hover { background: rgba(255,255,255,0.15); }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/" class="back-btn">← Live</a>
+    <h1>Gallery</h1>
+    <span class="stats" id="stats"></span>
+  </header>
+
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+    <button class="filter-btn" onclick="setFilter('bird', this)">Birds only</button>
+    <button class="filter-btn" onclick="setFilter('motion', this)">Motion only</button>
+    <div style="flex:1"></div>
+    <button class="filter-btn" onclick="buildTimelapse(this)" id="tlBtn">Build timelapse</button>
+    <a id="tlLink" href="/timelapse/video" target="_blank" class="filter-btn" style="display:none">▶ Watch</a>
+  </div>
+
+  <div id="slowmoSection" style="display:none;padding:12px 20px;border-bottom:1px solid #2a2a2a">
+    <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#555;margin-bottom:10px">Hummingbird Slow-Mo</div>
+    <div id="slowmoList" style="display:flex;gap:12px;flex-wrap:wrap"></div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <button class="load-more" id="loadMore" onclick="loadMore()">Load more</button>
+
+  <div class="lightbox" id="lightbox">
+    <button class="lb-close" onclick="closeLightbox()">✕</button>
+    <button class="lb-nav prev" onclick="navLightbox(-1)">‹</button>
+    <img id="lbImg" src="" alt="">
+    <div class="lb-info" id="lbInfo"></div>
+    <button class="lb-nav next" onclick="navLightbox(1)">›</button>
+  </div>
+
+  <script>
+    let page = 0;
+    let allItems = [];
+    let filter = 'all';
+    let lbIndex = 0;
+
+    function setFilter(f, btn) {
+      if (filter === f) return;
+      filter = f;
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      // Reset and reload from server with new filter
+      page = 0;
+      allItems = [];
+      document.getElementById('grid').innerHTML = '';
+      document.getElementById('loadMore').disabled = false;
+      document.getElementById('loadMore').textContent = 'Load more';
+      loadMore();
+    }
+
+    function renderGrid() {
+      const grid = document.getElementById('grid');
+      grid.innerHTML = allItems.map((item, idx) => `
+        <div class="card ${item.is_bird ? 'bird' : ''}" onclick="openLightbox(${idx})">
+          <img src="/captures/thumb/${item.filename}" loading="lazy" alt="">
+          <div class="overlay">
+            ${item.is_bird ? `<div class="species">${item.species.split(' ').pop()} ${item.confidence.toFixed(0)}%</div>` : ''}
+            <div class="time">${item.timestamp.slice(11,16)} · ${item.timestamp.slice(0,10)}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function loadMore() {
+      const btn = document.getElementById('loadMore');
+      btn.disabled = true;
+      btn.textContent = 'Loading…';
+
+      const res = await fetch(`/api/captures?page=${page}&filter=${filter}`);
+      const data = await res.json();
+      allItems = allItems.concat(data.items);
+      page++;
+
+      const total = data.total;
+      document.getElementById('stats').textContent = `${allItems.length} of ${total} ${filter === 'all' ? 'captures' : filter === 'bird' ? 'bird captures' : 'motion captures'}`;
+      btn.disabled = allItems.length >= total;
+      btn.textContent = allItems.length >= total ? 'All loaded' : 'Load more';
+
+      renderGrid();
+    }
+
+    function openLightbox(idx) {
+      lbIndex = idx;
+      showLightbox();
+      document.getElementById('lightbox').classList.add('open');
+    }
+
+    function showLightbox() {
+      const item = allItems[lbIndex];
+      document.getElementById('lbImg').src = `/captures/${item.filename}`;
+      document.getElementById('lbInfo').innerHTML = item.is_bird
+        ? `<span class="lb-species">${item.species}</span> — ${item.confidence.toFixed(1)}% confidence<br><span style="color:#888">${item.timestamp}</span>`
+        : `<span style="color:#888">${item.timestamp}</span>`;
+    }
+
+    function navLightbox(dir) {
+      lbIndex = (lbIndex + dir + allItems.length) % allItems.length;
+      showLightbox();
+    }
+
+    function closeLightbox() {
+      document.getElementById('lightbox').classList.remove('open');
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeLightbox();
+      if (e.key === 'ArrowRight') navLightbox(1);
+      if (e.key === 'ArrowLeft') navLightbox(-1);
+    });
+
+    async function buildTimelapse(btn) {
+      btn.textContent = 'Building…';
+      btn.disabled = true;
+      try {
+        const res = await fetch('/timelapse/build', {method: 'POST'});
+        const data = await res.json();
+        if (data.ok) {
+          btn.textContent = '✓ Built';
+          document.getElementById('tlLink').style.display = '';
+        } else {
+          btn.textContent = 'Failed';
+          alert(data.error);
+        }
+      } catch(e) {
+        btn.textContent = 'Error';
+      }
+      btn.disabled = false;
+    }
+
+    // Check if video already exists
+    fetch('/timelapse/status').then(r => r.json()).then(d => {
+      if (d.video_exists) document.getElementById('tlLink').style.display = '';
+    });
+
+    // Load slow-mo clips
+    fetch('/slowmo').then(r => r.json()).then(videos => {
+      if (!videos.length) return;
+      const section = document.getElementById('slowmoSection');
+      const list = document.getElementById('slowmoList');
+      section.style.display = '';
+      list.innerHTML = videos.map(v => `
+        <a href="/slowmo/${v.filename}" target="_blank"
+           style="display:flex;align-items:center;gap:8px;background:#2a2a2a;border-radius:6px;padding:8px 12px;text-decoration:none;color:#e0e0e0;font-size:0.8rem;border:1px solid #333">
+          🐦 ${v.timestamp.slice(0,8)} ${v.timestamp.slice(9,15).replace(/(\d{2})(\d{2})(\d{2})/, '$1:$2:$3')}
+          <span style="color:#555">${v.size_mb}MB</span>
+        </a>
+      `).join('');
+    });
+
+    // Initial load
+    loadMore();
+  </script>
+</body>
+</html>

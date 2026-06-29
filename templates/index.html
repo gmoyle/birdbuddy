@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>BirdBuddy</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #1a1a1a;
+      color: #e0e0e0;
+      font-family: system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      overflow: hidden;
+    }
+
+    header {
+      background: #111;
+      padding: 10px 16px;
+      padding-top: max(10px, env(safe-area-inset-top));
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 600; flex: 1; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: #4caf50; animation: pulse 2s infinite; flex-shrink: 0; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    .nav-btn {
+      background: none;
+      border: 1px solid #444;
+      color: #aaa;
+      border-radius: 5px;
+      padding: 5px 10px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      text-decoration: none;
+      transition: border-color 0.15s, color 0.15s;
+      display: inline-flex;
+      align-items: center;
+      white-space: nowrap;
+    }
+    .nav-btn:hover { border-color: #aaa; color: #fff; }
+    .nav-btn.active { border-color: #4caf50; color: #4caf50; }
+
+    /* Hide text labels on small screens, show icons */
+    .nav-label { display: inline; }
+    @media (max-width: 480px) {
+      .nav-label { display: none; }
+      .nav-icon { display: inline !important; }
+    }
+    .nav-icon { display: none; }
+
+    /* Stream fills all available space */
+    .stream-pane {
+      flex: 1;
+      background: #000;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 0;
+      position: relative;
+    }
+    .stream-pane img { width: 100%; height: 100%; object-fit: contain; }
+
+    /* ── Desktop controls bar (horizontal) ── */
+    .controls-bar {
+      flex-shrink: 0;
+      background: #222;
+      border-top: 1px solid #333;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+      max-height: 300px;
+    }
+    .controls-bar.collapsed { max-height: 0; border-top: none; }
+    .controls-bar-inner {
+      padding: 12px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 16px 24px;
+    }
+    .controls-toggle {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: #444;
+      border: 1px solid #555;
+      color: #fff;
+      font-size: 1.2rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+    .controls-toggle:hover { background: #555; }
+
+    .controls-group {
+      display: flex;
+      align-items: flex-end;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+
+    .group-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #555;
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      margin-bottom: 2px;
+      flex-shrink: 0;
+    }
+
+    .divider {
+      width: 1px;
+      background: #333;
+      align-self: stretch;
+      margin: 0 4px;
+      flex-shrink: 0;
+    }
+
+    .control {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 90px;
+    }
+    .control .label-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+    }
+    .control .label-row .val {
+      color: #888;
+      font-variant-numeric: tabular-nums;
+    }
+    input[type=range] {
+      width: 100%;
+      accent-color: #4caf50;
+      cursor: pointer;
+    }
+
+    .focus-mode-btn {
+      padding: 3px 8px;
+      font-size: 0.72rem;
+      border: 1px solid #444;
+      border-radius: 4px;
+      background: none;
+      color: #888;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .focus-mode-btn.active { background: #4caf50; border-color: #4caf50; color: #fff; }
+    .focus-mode-btn:hover:not(.active) { border-color: #aaa; color: #fff; }
+
+    .save-btn {
+      padding: 8px 16px;
+      background: #4caf50;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+      flex-shrink: 0;
+      align-self: flex-end;
+    }
+    .save-btn:hover { background: #43a047; }
+    .save-btn:active { background: #388e3c; }
+
+    /* ── Mobile bottom sheet ── */
+    .sheet-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 40;
+    }
+    .sheet-backdrop.open { display: block; }
+
+    .bottom-sheet {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      background: #1e1e1e;
+      border-radius: 16px 16px 0 0;
+      border-top: 1px solid #333;
+      z-index: 50;
+      transform: translateY(100%);
+      transition: transform 0.3s ease;
+      max-height: 80dvh;
+      display: flex;
+      flex-direction: column;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .bottom-sheet.open { transform: translateY(0); }
+
+    .sheet-handle {
+      width: 36px; height: 4px;
+      background: #444;
+      border-radius: 2px;
+      margin: 10px auto 0;
+      flex-shrink: 0;
+    }
+    .sheet-title {
+      padding: 10px 20px 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #555;
+      flex-shrink: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sheet-save-btn {
+      background: #4caf50;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      padding: 5px 14px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .sheet-scroll {
+      overflow-y: auto;
+      flex: 1;
+      padding: 0 20px 16px;
+    }
+
+    /* Accordion sections in sheet */
+    .accordion {
+      border-top: 1px solid #2a2a2a;
+    }
+    .accordion-header {
+      width: 100%;
+      background: none;
+      border: none;
+      color: #e0e0e0;
+      text-align: left;
+      padding: 14px 0;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .accordion-header .chevron {
+      color: #555;
+      font-size: 0.9rem;
+      transition: transform 0.2s;
+    }
+    .accordion-header.open .chevron { transform: rotate(180deg); }
+    .accordion-body {
+      display: none;
+      padding-bottom: 16px;
+    }
+    .accordion-body.open { display: block; }
+
+    /* Sliders in sheet: full-width stacked */
+    .sheet-control {
+      margin-bottom: 16px;
+    }
+    .sheet-control .label-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      margin-bottom: 6px;
+    }
+    .sheet-control .val { color: #888; font-variant-numeric: tabular-nums; }
+    .sheet-control input[type=range] { width: 100%; }
+
+    .focus-btns { display: flex; gap: 8px; margin-top: 4px; }
+    .focus-btns .focus-mode-btn { flex: 1; padding: 8px; font-size: 0.8rem; }
+
+    /* ── Sightings drawer ── */
+    .sightings-drawer {
+      flex-shrink: 0;
+      background: #1e1e1e;
+      border-top: 1px solid #333;
+      height: 200px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      display: none;
+    }
+    .sightings-drawer.open { display: block; }
+
+    .sightings-inner {
+      display: flex;
+      gap: 12px;
+      padding: 12px 16px;
+      height: 100%;
+    }
+
+    .sighting-card {
+      flex-shrink: 0;
+      width: 140px;
+      background: #2a2a2a;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: border-color 0.15s;
+    }
+    .sighting-card:hover { border-color: #4caf50; }
+    .sighting-card img {
+      width: 100%;
+      height: 100px;
+      object-fit: cover;
+      background: #111;
+    }
+    .sighting-card .card-info { padding: 6px 8px; }
+    .sighting-card .species {
+      font-size: 0.75rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #e0e0e0;
+    }
+    .sighting-card .meta { font-size: 0.65rem; color: #888; margin-top: 2px; }
+
+    .sightings-empty {
+      color: #555;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+    }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 90px;
+      right: 20px;
+      background: #4caf50;
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+      z-index: 200;
+    }
+    .toast.show { opacity: 1; }
+
+    /* ── Lightbox ── */
+    .lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.9);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .lightbox.open { display: flex; }
+    .lightbox img { max-width: 90vw; max-height: 80vh; object-fit: contain; border-radius: 4px; }
+    .lightbox .lb-info { color: #ccc; font-size: 0.85rem; text-align: center; padding: 0 20px; }
+    .lightbox .lb-close {
+      position: absolute;
+      top: 16px; right: 20px;
+      background: none; border: none;
+      color: #aaa; font-size: 1.5rem;
+      cursor: pointer;
+    }
+
+    /* ── Fullscreen ── */
+    :fullscreen header,
+    :fullscreen .controls-bar,
+    :fullscreen .sightings-drawer { display: none; }
+    :fullscreen .stream-pane { height: 100vh; }
+
+    /* ── Responsive: hide desktop bar, show sheet trigger on mobile ── */
+    @media (max-width: 700px) {
+      .controls-bar { display: none; }
+      .controls-toggle { display: none; }
+      .sightings-drawer { height: 170px; }
+      .sighting-card { width: 120px; }
+      .sighting-card img { height: 80px; }
+    }
+    @media (min-width: 701px) {
+      .sheet-backdrop,
+      .bottom-sheet,
+      #sheetBtn { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="dot"></div>
+    <h1>BirdBuddy</h1>
+    <button class="nav-btn" onclick="toggleSightings()" id="sightingsBtn">
+      <span class="nav-icon">🐦</span><span class="nav-label">Sightings</span>
+    </button>
+    <a href="/gallery" class="nav-btn">
+      <span class="nav-icon">🖼</span><span class="nav-label">Gallery</span>
+    </a>
+    <a href="/stats" class="nav-btn">
+      <span class="nav-icon">📊</span><span class="nav-label">Stats</span>
+    </a>
+    <a href="/help" class="nav-btn">
+      <span class="nav-icon">?</span><span class="nav-label">Help</span>
+    </a>
+    <button class="nav-btn" id="sheetBtn" onclick="openSheet()">⚙</button>
+    <button class="nav-btn" onclick="toggleFullscreen()" id="fsBtn">
+      <span class="nav-icon">⛶</span><span class="nav-label">⛶ Fullscreen</span>
+    </button>
+  </header>
+
+  <div class="stream-pane">
+    <img id="streamImg" alt="Live feed">
+  </div>
+
+  <!-- Desktop controls toggle button -->
+  <button class="controls-toggle" id="controlsToggle" onclick="toggleControls()" title="Toggle controls">⚙</button>
+
+  <!-- Desktop horizontal controls -->
+  <div class="controls-bar" id="controlsBar">
+   <div class="controls-bar-inner">
+    <div class="controls-group">
+      <span class="group-label">Focus</span>
+      <div class="control" style="min-width:70px">
+        <div class="label-row"><label>Mode</label></div>
+        <div style="display:flex;gap:6px;margin-top:4px">
+          <button id="focusAuto" class="focus-mode-btn active" onclick="setFocusMode('auto')">Auto</button>
+          <button id="focusManual" class="focus-mode-btn" onclick="setFocusMode('manual')">Manual</button>
+        </div>
+      </div>
+      <div class="control" id="focusPosControl" style="display:none">
+        <div class="label-row"><label for="focus_position">Position</label><span class="val" id="val_focus_position"></span></div>
+        <input type="range" id="focus_position" min="0.0" max="10.0" step="0.1">
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="controls-group">
+      <span class="group-label">Camera</span>
+      <div class="control">
+        <div class="label-row"><label for="brightness">Brightness</label><span class="val" id="val_brightness"></span></div>
+        <input type="range" id="brightness" min="-1.0" max="1.0" step="0.01">
+      </div>
+      <div class="control">
+        <div class="label-row"><label for="contrast">Contrast</label><span class="val" id="val_contrast"></span></div>
+        <input type="range" id="contrast" min="0.0" max="8.0" step="0.1">
+      </div>
+      <div class="control">
+        <div class="label-row"><label for="saturation">Saturation</label><span class="val" id="val_saturation"></span></div>
+        <input type="range" id="saturation" min="0.0" max="4.0" step="0.1">
+      </div>
+      <div class="control">
+        <div class="label-row"><label for="sharpness">Sharpness</label><span class="val" id="val_sharpness"></span></div>
+        <input type="range" id="sharpness" min="0.0" max="8.0" step="0.1">
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="controls-group">
+      <span class="group-label">Motion</span>
+      <div class="control">
+        <div class="label-row"><label for="motion_threshold">Threshold</label><span class="val" id="val_motion_threshold"></span></div>
+        <input type="range" id="motion_threshold" min="1" max="100" step="1">
+      </div>
+      <div class="control">
+        <div class="label-row"><label for="motion_min_pixels">Min px</label><span class="val" id="val_motion_min_pixels"></span></div>
+        <input type="range" id="motion_min_pixels" min="50" max="5000" step="50">
+      </div>
+      <div class="control">
+        <div class="label-row"><label for="motion_cooldown">Cooldown (s)</label><span class="val" id="val_motion_cooldown"></span></div>
+        <input type="range" id="motion_cooldown" min="1" max="30" step="1">
+      </div>
+      <div class="control">
+        <div class="label-row"><label for="confidence_threshold">Min confidence %</label><span class="val" id="val_confidence_threshold"></span></div>
+        <input type="range" id="confidence_threshold" min="0" max="100" step="5">
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="controls-group">
+      <span class="group-label">Timelapse</span>
+      <div class="control">
+        <div class="label-row"><label for="timelapse_interval">Interval (min)</label><span class="val" id="val_timelapse_interval"></span></div>
+        <input type="range" id="timelapse_interval" min="0" max="60" step="1">
+      </div>
+    </div>
+
+   </div>
+  </div>
+
+  <!-- Sightings drawer -->
+  <div class="sightings-drawer" id="sightingsDrawer">
+    <div class="sightings-inner" id="sightingsInner">
+      <div class="sightings-empty">Loading sightings...</div>
+    </div>
+  </div>
+
+  <!-- Mobile bottom sheet -->
+  <div class="sheet-backdrop" id="sheetBackdrop" onclick="closeSheet()"></div>
+  <div class="bottom-sheet" id="bottomSheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">
+      Settings
+    </div>
+    <div class="sheet-scroll">
+
+      <div class="accordion">
+        <button class="accordion-header open" onclick="toggleAccordion(this)">
+          Focus <span class="chevron">▾</span>
+        </button>
+        <div class="accordion-body open">
+          <div class="sheet-control">
+            <div class="label-row"><span>Mode</span></div>
+            <div class="focus-btns">
+              <button id="mFocusAuto" class="focus-mode-btn active" onclick="setFocusMode('auto')">Auto</button>
+              <button id="mFocusManual" class="focus-mode-btn" onclick="setFocusMode('manual')">Manual</button>
+            </div>
+          </div>
+          <div class="sheet-control" id="mFocusPosControl" style="display:none">
+            <div class="label-row"><span>Position</span><span class="val" id="mval_focus_position"></span></div>
+            <input type="range" id="m_focus_position" min="0.0" max="10.0" step="0.1">
+          </div>
+        </div>
+      </div>
+
+      <div class="accordion">
+        <button class="accordion-header" onclick="toggleAccordion(this)">
+          Camera <span class="chevron">▾</span>
+        </button>
+        <div class="accordion-body">
+          <div class="sheet-control">
+            <div class="label-row"><span>Brightness</span><span class="val" id="mval_brightness"></span></div>
+            <input type="range" id="m_brightness" min="-1.0" max="1.0" step="0.01">
+          </div>
+          <div class="sheet-control">
+            <div class="label-row"><span>Contrast</span><span class="val" id="mval_contrast"></span></div>
+            <input type="range" id="m_contrast" min="0.0" max="8.0" step="0.1">
+          </div>
+          <div class="sheet-control">
+            <div class="label-row"><span>Saturation</span><span class="val" id="mval_saturation"></span></div>
+            <input type="range" id="m_saturation" min="0.0" max="4.0" step="0.1">
+          </div>
+          <div class="sheet-control">
+            <div class="label-row"><span>Sharpness</span><span class="val" id="mval_sharpness"></span></div>
+            <input type="range" id="m_sharpness" min="0.0" max="8.0" step="0.1">
+          </div>
+        </div>
+      </div>
+
+      <div class="accordion">
+        <button class="accordion-header" onclick="toggleAccordion(this)">
+          Motion <span class="chevron">▾</span>
+        </button>
+        <div class="accordion-body">
+          <div class="sheet-control">
+            <div class="label-row"><span>Threshold</span><span class="val" id="mval_motion_threshold"></span></div>
+            <input type="range" id="m_motion_threshold" min="1" max="100" step="1">
+          </div>
+          <div class="sheet-control">
+            <div class="label-row"><span>Min pixels</span><span class="val" id="mval_motion_min_pixels"></span></div>
+            <input type="range" id="m_motion_min_pixels" min="50" max="5000" step="50">
+          </div>
+          <div class="sheet-control">
+            <div class="label-row"><span>Cooldown (s)</span><span class="val" id="mval_motion_cooldown"></span></div>
+            <input type="range" id="m_motion_cooldown" min="1" max="30" step="1">
+          </div>
+          <div class="sheet-control">
+            <div class="label-row"><span>Min confidence %</span><span class="val" id="mval_confidence_threshold"></span></div>
+            <input type="range" id="m_confidence_threshold" min="0" max="100" step="5">
+          </div>
+        </div>
+      </div>
+
+      <div class="accordion">
+        <button class="accordion-header" onclick="toggleAccordion(this)">
+          Timelapse <span class="chevron">▾</span>
+        </button>
+        <div class="accordion-body">
+          <div class="sheet-control">
+            <div class="label-row"><span>Interval (min, 0=off)</span><span class="val" id="mval_timelapse_interval"></span></div>
+            <input type="range" id="m_timelapse_interval" min="0" max="60" step="1">
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Lightbox -->
+  <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+    <button class="lb-close" onclick="closeLightbox()">✕</button>
+    <img id="lbImg" src="" alt="">
+    <div class="lb-info" id="lbInfo"></div>
+  </div>
+
+  <div class="toast" id="toast">Settings applied</div>
+
+  <script>
+    const settings = {{ settings_json | safe }};
+
+    // Map: setting key → [desktop input id, mobile input id, desktop val id, mobile val id]
+    const SLIDERS = [
+      ['focus_position',      'focus_position',      'm_focus_position',      'val_focus_position',      'mval_focus_position'],
+      ['brightness',          'brightness',          'm_brightness',          'val_brightness',          'mval_brightness'],
+      ['contrast',            'contrast',            'm_contrast',            'val_contrast',            'mval_contrast'],
+      ['saturation',          'saturation',          'm_saturation',          'val_saturation',          'mval_saturation'],
+      ['sharpness',           'sharpness',           'm_sharpness',           'val_sharpness',           'mval_sharpness'],
+      ['motion_threshold',    'motion_threshold',    'm_motion_threshold',    'val_motion_threshold',    'mval_motion_threshold'],
+      ['motion_min_pixels',   'motion_min_pixels',   'm_motion_min_pixels',   'val_motion_min_pixels',   'mval_motion_min_pixels'],
+      ['motion_cooldown',     'motion_cooldown',     'm_motion_cooldown',     'val_motion_cooldown',     'mval_motion_cooldown'],
+      ['confidence_threshold','confidence_threshold','m_confidence_threshold','val_confidence_threshold','mval_confidence_threshold'],
+      ['timelapse_interval',  'timelapse_interval',  'm_timelapse_interval',  'val_timelapse_interval',  'mval_timelapse_interval'],
+    ];
+
+    let _saveTimer = null;
+    function debouncedSave() {
+      clearTimeout(_saveTimer);
+      _saveTimer = setTimeout(saveSettings, 400);
+    }
+
+    function syncSlider(key, dId, mId, dValId, mValId) {
+      const val = settings[key];
+      const d = document.getElementById(dId);
+      const m = document.getElementById(mId);
+      const dv = document.getElementById(dValId);
+      const mv = document.getElementById(mValId);
+      if (val !== undefined) { if(d) d.value = val; if(m) m.value = val; }
+      const show = (d || m).value;
+      if(dv) dv.textContent = show;
+      if(mv) mv.textContent = show;
+      function onInput(src, dstEl, valEls) {
+        dstEl && (dstEl.value = src.value);
+        valEls.forEach(v => v && (v.textContent = src.value));
+        debouncedSave();
+      }
+      if(d) d.addEventListener('input', () => onInput(d, m, [dv, mv]));
+      if(m) m.addEventListener('input', () => onInput(m, d, [dv, mv]));
+    }
+
+    SLIDERS.forEach(args => syncSlider(...args));
+
+    // Focus mode — sync desktop + mobile buttons
+    function setFocusMode(mode) {
+      settings.focus_mode = mode;
+      ['focusAuto','mFocusAuto'].forEach(id => document.getElementById(id)?.classList.toggle('active', mode==='auto'));
+      ['focusManual','mFocusManual'].forEach(id => document.getElementById(id)?.classList.toggle('active', mode==='manual'));
+      ['focusPosControl','mFocusPosControl'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = mode === 'manual' ? '' : 'none';
+      });
+      saveSettings();
+    }
+    if (settings.focus_mode === 'manual') setFocusMode('manual');
+
+    // Accordion
+    function toggleAccordion(btn) {
+      btn.classList.toggle('open');
+      btn.nextElementSibling.classList.toggle('open');
+    }
+
+    // Bottom sheet
+    function openSheet() {
+      document.getElementById('bottomSheet').classList.add('open');
+      document.getElementById('sheetBackdrop').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeSheet() {
+      document.getElementById('bottomSheet').classList.remove('open');
+      document.getElementById('sheetBackdrop').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    // Sightings drawer
+    function toggleSightings() {
+      const drawer = document.getElementById('sightingsDrawer');
+      const btn = document.getElementById('sightingsBtn');
+      const open = drawer.classList.toggle('open');
+      btn.classList.toggle('active', open);
+      if (open) loadSightings();
+    }
+
+    function loadSightings() {
+      fetch('/sightings').then(r => r.json()).then(data => {
+        const inner = document.getElementById('sightingsInner');
+        if (!data.length) {
+          inner.innerHTML = '<div class="sightings-empty">No bird sightings yet.</div>';
+          return;
+        }
+        inner.innerHTML = data.map(s => `
+          <div class="sighting-card" onclick="openLightbox('/captures/${s.filename}', '${s.species}', '${s.timestamp}', ${s.confidence})">
+            <img src="${s.has_image ? '/captures/' + s.filename : ''}" alt="${s.species}" loading="lazy">
+            <div class="card-info">
+              <div class="species">${s.species.split(' ').pop()}</div>
+              <div class="meta">${s.confidence.toFixed(1)}% · ${s.timestamp.slice(11,16)}</div>
+            </div>
+          </div>
+        `).join('');
+      });
+    }
+
+    // Lightbox
+    function openLightbox(src, species, timestamp, confidence) {
+      document.getElementById('lbImg').src = src;
+      document.getElementById('lbInfo').textContent = `${species} — ${confidence.toFixed(1)}% · ${timestamp}`;
+      document.getElementById('lightbox').classList.add('open');
+    }
+    function closeLightbox() {
+      document.getElementById('lightbox').classList.remove('open');
+    }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+    // Fullscreen
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+    }
+    document.addEventListener('fullscreenchange', () => {
+      const btn = document.getElementById('fsBtn');
+      if (btn) btn.querySelector('.nav-label').textContent = document.fullscreenElement ? '✕ Exit' : '⛶ Fullscreen';
+    });
+
+    // Save settings — read from whichever set of inputs is visible
+    function saveSettings() {
+      const isMobile = window.innerWidth <= 700;
+      const payload = {};
+      SLIDERS.forEach(([key, dId, mId]) => {
+        const el = document.getElementById(isMobile ? mId : dId) || document.getElementById(dId);
+        if (!el) return;
+        payload[key] = parseFloat(el.step) < 1 ? parseFloat(el.value) : parseInt(el.value);
+      });
+      payload.focus_mode = settings.focus_mode;
+
+      fetch('/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).then(r => r.json()).then(() => {
+        const t = document.getElementById('toast');
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 2000);
+      });
+    }
+
+  // Controls panel toggle
+  function toggleControls() {
+    const bar = document.getElementById('controlsBar');
+    const btn = document.getElementById('controlsToggle');
+    const collapsed = bar.classList.toggle('collapsed');
+    btn.textContent = collapsed ? '⚙' : '✕';
+    localStorage.setItem('controlsCollapsed', collapsed ? '1' : '0');
+  }
+  // Restore collapsed state
+  if (localStorage.getItem('controlsCollapsed') === '1') {
+    document.getElementById('controlsBar').classList.add('collapsed');
+  } else {
+    document.getElementById('controlsToggle').textContent = '✕';
+  }
+
+  // Pick stream resolution based on screen width, always fresh connection
+  const _si = document.getElementById('streamImg');
+  if (_si) {
+    const _streamUrl = () => (window.innerWidth <= 768 ? '/stream/mobile' : '/stream') + '?t=' + Date.now();
+    _si.src = _streamUrl();
+    _si.onerror = () => setTimeout(() => { _si.src = _streamUrl(); }, 2000);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) _si.src = _streamUrl();
+    });
+  }
+  </script>
+</body>
+</html>

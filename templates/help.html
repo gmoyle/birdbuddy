@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BirdBuddy — Help</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #111; color: #ddd; font-family: system-ui, sans-serif; min-height: 100vh; }
+    header {
+      background: #1a1a1a;
+      border-bottom: 1px solid #333;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 600; flex: 1; }
+    .nav-btn {
+      background: none;
+      border: 1px solid #555;
+      color: #ccc;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .nav-btn:hover { border-color: #aaa; color: #fff; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #4caf50; flex-shrink: 0; }
+    main { max-width: 800px; margin: 0 auto; padding: 32px 20px; }
+    h2 { font-size: 1.3rem; margin-bottom: 24px; color: #fff; }
+    .section { margin-bottom: 40px; }
+    .section h3 {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #4caf50;
+      margin-bottom: 16px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #333;
+    }
+    .setting {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 8px 20px;
+      padding: 14px 0;
+      border-bottom: 1px solid #222;
+    }
+    .setting:last-child { border-bottom: none; }
+    .setting-name {
+      font-weight: 600;
+      color: #fff;
+      font-size: 0.9rem;
+      padding-top: 2px;
+    }
+    .setting-range {
+      font-size: 0.75rem;
+      color: #888;
+      margin-top: 2px;
+    }
+    .setting-desc {
+      font-size: 0.9rem;
+      line-height: 1.6;
+      color: #ccc;
+    }
+    .tip {
+      background: #1e2a1e;
+      border: 1px solid #2d4a2d;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-top: 16px;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      color: #aad4aa;
+    }
+    .tip strong { color: #6fcf6f; }
+    @media (max-width: 600px) {
+      .setting { grid-template-columns: 1fr; }
+      .setting-name { margin-bottom: 4px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="dot"></div>
+    <h1>BirdBuddy</h1>
+    <a href="/" class="nav-btn">← Live</a>
+    <a href="/gallery" class="nav-btn">Gallery</a>
+    <a href="/stats" class="nav-btn">Stats</a>
+  </header>
+
+  <main>
+    <h2>Help &amp; Settings Guide</h2>
+
+    <div class="section">
+      <h3>Motion Detection</h3>
+
+      <div class="setting">
+        <div>
+          <div class="setting-name">Threshold</div>
+          <div class="setting-range">Range: 1–100</div>
+        </div>
+        <div class="setting-desc">
+          How different a pixel must be between frames before it's counted as motion. Lower values make the camera more sensitive — it will trigger on subtle movements like shadows or leaves. Higher values only trigger on obvious movement like a bird landing. <strong>Start around 20–30</strong> and adjust if you're getting too many false triggers or missing birds.
+        </div>
+      </div>
+
+      <div class="setting">
+        <div>
+          <div class="setting-name">Min Pixels</div>
+          <div class="setting-range">Range: 50–5000</div>
+        </div>
+        <div class="setting-desc">
+          The minimum number of changed pixels required to trigger a capture. This filters out tiny disturbances like a single leaf blowing or a flickering shadow. If a bird is small in the frame, lower this value. If you're getting captures triggered by wind or lighting changes, raise it. <strong>500–1000</strong> works well for a bird at a typical feeder distance.
+        </div>
+      </div>
+
+      <div class="setting">
+        <div>
+          <div class="setting-name">Cooldown</div>
+          <div class="setting-range">Range: 1–30 seconds</div>
+        </div>
+        <div class="setting-desc">
+          After a motion capture is saved, how many seconds to wait before capturing again. This prevents filling your storage with hundreds of nearly identical frames of the same bird sitting still. Set it low (1–3s) if you want to catch every moment of a bird's visit, or high (10–30s) to only capture one image per visit and save storage space.
+        </div>
+      </div>
+
+      <div class="setting">
+        <div>
+          <div class="setting-name">Min Confidence %</div>
+          <div class="setting-range">Range: 0–100%</div>
+        </div>
+        <div class="setting-desc">
+          The minimum confidence score the bird classifier must reach before a sighting is logged. Motion captures are always saved regardless of this setting — this only controls what appears in your Sightings feed and Stats. Set it lower (20–40%) to catch more species including uncertain detections, or higher (60–80%) if you only want high-confidence identifications in your log.
+        </div>
+      </div>
+
+      <div class="tip">
+        <strong>Tip: tuning for your feeder.</strong> If you're getting too many false captures, raise Threshold and Min Pixels first. If you're missing birds, lower Threshold. The Cooldown is the most effective way to control storage usage — a 5 second cooldown means a bird that stays 30 seconds generates at most 6 captures instead of hundreds.
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Camera</h3>
+
+      <div class="setting">
+        <div>
+          <div class="setting-name">Brightness</div>
+          <div class="setting-range">Range: -1.0 – 1.0</div>
+        </div>
+        <div class="setting-desc">
+          Offsets the overall exposure. Use a small positive value if the image looks dark, or a negative value if it's washed out. For outdoor daylight use, 0.0 (default) usually works well — the camera's auto-exposure handles most conditions.
+        </div>
+      </div>
+
+      <div class="setting">
+        <div>
+          <div class="setting-name">Contrast</div>
+          <div class="setting-range">Range: 0.0 – 8.0</div>
+        </div>
+        <div class="setting-desc">
+          Controls the difference between dark and light areas. Higher values make colours pop more but can lose detail in shadows and highlights. 1.0 is neutral. Values around 1.2–1.5 work well for outdoor bird photography.
+        </div>
+      </div>
+
+      <div class="setting">
+        <div>
+          <div class="setting-name">Saturation</div>
+          <div class="setting-range">Range: 0.0 – 4.0</div>
+        </div>
+        <div class="setting-desc">
+          Controls colour intensity. 1.0 is neutral. Raise it slightly (1.2–1.5) to make bird plumage colours more vivid. Set to 0.0 for black-and-white output.
+        </div>
+      </div>
+
+      <div class="setting">
+        <div>
+          <div class="setting-name">Sharpness</div>
+          <div class="setting-range">Range: 0.0 – 8.0</div>
+        </div>
+        <div class="setting-desc">
+          Controls edge enhancement. 1.0 is neutral. A value of 1.5–2.0 can help bring out feather detail. Too high will introduce noise and haloing around edges.
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Timelapse</h3>
+
+      <div class="setting">
+        <div>
+          <div class="setting-name">Interval</div>
+          <div class="setting-range">Range: 0–60 minutes</div>
+        </div>
+        <div class="setting-desc">
+          How often to automatically save a timelapse frame. Set to 0 to disable. A 5-minute interval over a full day produces 288 frames — enough for a smooth timelapse video. Use the Gallery page to build the video once you've collected frames.
+        </div>
+      </div>
+    </div>
+
+  </main>
+</body>
+</html>
