@@ -29,13 +29,43 @@ logging.basicConfig(
 log = logging.getLogger("birdbuddy")
 
 app = Flask(__name__)
+import threading
+
+
+@app.before_request
+def _track_client_activity():
+    global _last_request_at
+    from flask import request as _rq
+    if _rq.path not in _ACTIVITY_EXCLUDE:
+        _last_request_at = _time.time()
 
 Path("logs").mkdir(exist_ok=True)
 log.info("BirdBuddy starting")
 _settings = cfg.load()
 _camera = Camera(cam_id=0)
 _camera1 = Camera(cam_id=1)
-_detector = MotionDetector(_camera, lambda: _settings)
+import time as _time
+_activity_lock = threading.Lock()
+_active_streams = 0
+_last_request_at = 0.0
+CLIENT_GRACE_SECS = 20.0
+# Endpoints that poll on a timer — they shouldn't count as "someone browsing"
+# or an idle open tab would suppress slow-mo forever.
+_ACTIVITY_EXCLUDE = {"/api/motion-status", "/api/slowmo-status"}
+
+
+def clients_active():
+    """True if the live stream is open or a page was served very recently.
+    Used to suppress slow-mo bursts while someone is viewing the site, since
+    the 120fps camera reconfiguration both interrupts the live feed and has
+    been the trigger for camera-pipeline hangs under concurrent load."""
+    with _activity_lock:
+        if _active_streams > 0:
+            return True
+    return (_time.time() - _last_request_at) < CLIENT_GRACE_SECS
+
+
+_detector = MotionDetector(_camera, lambda: _settings, clients_active=clients_active)
 _timelapse = TimelapseCapturer(_camera, lambda: _settings)
 _cleaner = DiskCleaner(lambda: _settings)
 _daynight = DayNightManager(_camera, lambda: _settings)
@@ -57,10 +87,23 @@ def index():
     return render_template("index.html", settings_json=json.dumps(_settings))
 
 
+def _counted_stream(cam_id):
+    """Wrap generate_stream to track how many live viewers are connected."""
+    global _active_streams
+    with _activity_lock:
+        _active_streams += 1
+    try:
+        for chunk in generate_stream(cam_id):
+            yield chunk
+    finally:
+        with _activity_lock:
+            _active_streams -= 1
+
+
 @app.route("/stream")
 def stream():
     return Response(
-        generate_stream(0),
+        _counted_stream(0),
         mimetype="multipart/x-mixed-replace; boundary=frame",
     )
 
@@ -70,7 +113,7 @@ def stream_cam(cam_id):
     if cam_id not in (0, 1):
         abort(404)
     return Response(
-        generate_stream(cam_id),
+        _counted_stream(cam_id),
         mimetype="multipart/x-mixed-replace; boundary=frame",
     )
 
@@ -78,7 +121,7 @@ def stream_cam(cam_id):
 @app.route("/stream/mobile")
 def stream_mobile():
     return Response(
-        generate_stream("mobile"),
+        _counted_stream("mobile"),
         mimetype="multipart/x-mixed-replace; boundary=frame",
     )
 
@@ -148,6 +191,19 @@ def capture_thumb(filename):
             im.thumbnail((320, 180))
             im.save(thumb_path, "JPEG", quality=70)
     return send_file(thumb_path, mimetype="image/jpeg")
+
+
+@app.route("/api/captures/<filename>", methods=["DELETE"])
+def delete_capture(filename):
+    if "/" in filename or "\\" in filename or ".." in filename or not filename.endswith(".jpg"):
+        abort(400)
+    path = CAPTURES_DIR / filename
+    if not path.exists():
+        abort(404)
+    path.unlink()
+    (THUMBS_DIR / filename).unlink(missing_ok=True)
+    log.info(f"Deleted capture: {filename}")
+    return jsonify({"ok": True})
 
 
 @app.route("/gallery")
@@ -291,9 +347,26 @@ def slowmo_video(filename):
     return send_file(path, mimetype="video/mp4")
 
 
+@app.route("/api/slowmo/<filename>", methods=["DELETE"])
+def delete_slowmo(filename):
+    if "/" in filename or "\\" in filename or ".." in filename or not filename.endswith(".mp4"):
+        abort(400)
+    path = SLOWMO_DIR / filename
+    if not path.exists():
+        abort(404)
+    path.unlink()
+    log.info(f"Deleted slow-mo video: {filename}")
+    return jsonify({"ok": True})
+
+
 @app.route("/api/slowmo-status")
 def slowmo_status():
     return jsonify({"capturing": is_capturing()})
+
+
+@app.route("/api/motion-status")
+def motion_status():
+    return jsonify(_detector.get_status())
 
 
 @app.route("/timelapse/build", methods=["POST"])

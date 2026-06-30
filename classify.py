@@ -48,9 +48,9 @@ def classify_image(image_path, interp=None, labels=None):
     confidence = float(output[top_idx])
     species = labels.get(top_idx, "unknown")
 
-    if confidence >= CONFIDENCE_THRESHOLD:
-        return {"species": species, "confidence": confidence, "is_bird": top_idx != 964}
-    return {"species": None, "confidence": confidence, "is_bird": False}
+    # No hardcoded floor here - the caller's confidence_threshold setting is the
+    # single source of truth so the UI slider actually controls sensitivity.
+    return {"species": species, "confidence": confidence, "is_bird": top_idx != 964}
 
 
 if __name__ == "__main__":

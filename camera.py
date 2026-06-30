@@ -39,6 +39,12 @@ class Camera:
         self._stop = threading.Event()
         self._paused = threading.Event()   # set = encode loop should idle
         self._loop_idle = threading.Event()  # set = encode loop confirmed idle
+        # Guards every call into self.cam. Settings changes (apply_settings)
+        # and slow-mo bursts both reconfigure/control the same picamera2
+        # object from different threads — without this, a settings POST
+        # landing mid-reconfigure can race with slow-mo and hang the camera
+        # driver hard enough to freeze the whole Pi.
+        self.cam_lock = threading.Lock()
         self._try_init()
 
     def _try_init(self):
@@ -70,7 +76,8 @@ class Camera:
                 continue
             self._loop_idle.clear()
             try:
-                arr = self.cam.capture_array("main")
+                with self.cam_lock:
+                    arr = self.cam.capture_array("main")
                 img = Image.fromarray(arr[:, :, ::-1], mode="RGB")
                 buf = io.BytesIO()
                 img.save(buf, format="JPEG", quality=70)
@@ -86,7 +93,7 @@ class Camera:
             except Exception as e:
                 log.error(f"Camera {self.cam_id} encode error: {e}")
                 time.sleep(1)
-        time.sleep(0.1)
+            time.sleep(0.05)
 
     def pause_for_slowmo(self, timeout=2.0):
         """Pause the encode loop and wait until it's idle. Camera stays streaming last frame."""
@@ -118,12 +125,20 @@ class Camera:
     def capture_file(self, path):
         if not self.available:
             return
-        self.cam.capture_file(str(path))
+        with self.cam_lock:
+            self.cam.capture_file(str(path))
 
     def capture_lores(self):
         if not self.available:
             return np.zeros((240, 320), dtype=np.int16)
-        arr = self.cam.capture_array("lores")
+        try:
+            with self.cam_lock:
+                arr = self.cam.capture_array("lores")
+        except Exception:
+            # The lores stream doesn't exist during slow-mo's high-framerate
+            # reconfiguration. Return a neutral frame so the motion detector
+            # sees zero diff instead of crashing its loop.
+            return np.zeros((240, 320), dtype=np.int16)
         return arr[:240, :320].astype(np.int16)
 
     def apply_settings(self, s):
@@ -135,13 +150,14 @@ class Camera:
             "Saturation": float(s["saturation"]),
             "Sharpness": float(s["sharpness"]),
         }
-        cam_controls = self.cam.camera_controls
-        if "AfMode" in cam_controls:
-            if s.get("focus_mode") == "manual":
-                controls["AfMode"] = 0
-                controls["LensPosition"] = float(s.get("focus_position", 1.0))
-            else:
-                controls["AfMode"] = 2
-                controls["AfSpeed"] = 1
-                controls["AfRange"] = 0
-        self.cam.set_controls(controls)
+        with self.cam_lock:
+            cam_controls = self.cam.camera_controls
+            if "AfMode" in cam_controls:
+                if s.get("focus_mode") == "manual":
+                    controls["AfMode"] = 0
+                    controls["LensPosition"] = float(s.get("focus_position", 1.0))
+                else:
+                    controls["AfMode"] = 2
+                    controls["AfSpeed"] = 1
+                    controls["AfRange"] = 0
+            self.cam.set_controls(controls)

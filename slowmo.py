@@ -95,49 +95,57 @@ class SlowMoCapture:
 
             cam = self.camera.cam
 
-            try:
-                # Pause encode loop (last frame stays frozen in _frames)
-                self.camera.pause_for_slowmo()
-
-                # Reconfigure for high-framerate binned mode
-                cam.stop()
-                hfr_config = cam.create_video_configuration(
-                    main={"size": SLOWMO_SIZE, "format": "YUV420"},
-                    controls={"FrameDurationLimits": (FRAME_DURATION_US, FRAME_DURATION_US)},
-                )
-                cam.configure(hfr_config)
-                cam.start()
-
-                # Record H264 natively for CAPTURE_SECS seconds
-                encoder = H264Encoder()
-                with open(h264_path, "wb") as f:
-                    cam.start_recording(encoder, FileOutput(f))
-                    time.sleep(CAPTURE_SECS)
-                    cam.stop_recording()
-
-                log.info(f"Burst recorded ({h264_path.stat().st_size // 1024} KB), encoding to MP4…")
-
-                if _h264_to_mp4(h264_path, output_path):
-                    log.info(
-                        f"Slow-mo saved: {output_path.name} "
-                        f"({CAPTURE_FPS/PLAYBACK_FPS:.1f}x slowdown)"
-                    )
-                h264_path.unlink(missing_ok=True)
-
-            except Exception as e:
-                log.error(f"Slow-mo capture failed: {e}", exc_info=True)
-                h264_path.unlink(missing_ok=True)
-
-            finally:
-                # Restore normal config and resume encode loop
+            # Hold the camera lock for the WHOLE reconfigure+record+restore
+            # sequence. Without this, a settings POST landing mid-sequence
+            # (e.g. apply_settings calling set_controls while we're between
+            # cam.stop()/cam.configure()/cam.start()) can race with this
+            # thread on the same picamera2/libcamera object hard enough to
+            # hang the camera driver — and on this hardware that has taken
+            # the whole Pi down, not just the Python process.
+            with self.camera.cam_lock:
                 try:
-                    cam.stop()
-                    self.camera._configure()
-                    cam.start()
-                    self.camera.resume_from_slowmo()
-                    log.info("Camera restored to normal mode after slow-mo")
-                except Exception as e2:
-                    log.error(f"Failed to restore camera after slow-mo: {e2}", exc_info=True)
+                    # Pause encode loop (last frame stays frozen in _frames)
+                    self.camera.pause_for_slowmo()
 
-                _capturing = False
-                self._active = False
+                    # Reconfigure for high-framerate binned mode
+                    cam.stop()
+                    hfr_config = cam.create_video_configuration(
+                        main={"size": SLOWMO_SIZE, "format": "YUV420"},
+                        controls={"FrameDurationLimits": (FRAME_DURATION_US, FRAME_DURATION_US)},
+                    )
+                    cam.configure(hfr_config)
+                    cam.start()
+
+                    # Record H264 natively for CAPTURE_SECS seconds
+                    encoder = H264Encoder()
+                    with open(h264_path, "wb") as f:
+                        cam.start_recording(encoder, FileOutput(f))
+                        time.sleep(CAPTURE_SECS)
+                        cam.stop_recording()
+
+                    log.info(f"Burst recorded ({h264_path.stat().st_size // 1024} KB), encoding to MP4…")
+
+                    if _h264_to_mp4(h264_path, output_path):
+                        log.info(
+                            f"Slow-mo saved: {output_path.name} "
+                            f"({CAPTURE_FPS/PLAYBACK_FPS:.1f}x slowdown)"
+                        )
+                    h264_path.unlink(missing_ok=True)
+
+                except Exception as e:
+                    log.error(f"Slow-mo capture failed: {e}", exc_info=True)
+                    h264_path.unlink(missing_ok=True)
+
+                finally:
+                    # Restore normal config and resume encode loop
+                    try:
+                        cam.stop()
+                        self.camera._configure()
+                        cam.start()
+                        self.camera.resume_from_slowmo()
+                        log.info("Camera restored to normal mode after slow-mo")
+                    except Exception as e2:
+                        log.error(f"Failed to restore camera after slow-mo: {e2}", exc_info=True)
+
+                    _capturing = False
+                    self._active = False

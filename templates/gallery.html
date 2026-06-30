@@ -102,6 +102,32 @@
       color: #aaa;
     }
 
+    .card-delete {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: rgba(198,40,40,0.9);
+      border: none;
+      color: #fff;
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.15s, background 0.15s;
+      z-index: 5;
+    }
+    .card:hover .card-delete { opacity: 1; }
+    .card-delete:hover { background: #d32f2f; }
+
+    .clip-card { position: relative; }
+    .clip-card .card-delete { width: 22px; height: 22px; font-size: 0.75rem; }
+    .clip-card:hover .card-delete { opacity: 1; }
+
     .load-more {
       display: block;
       margin: 20px auto 40px;
@@ -213,6 +239,7 @@
       const grid = document.getElementById('grid');
       grid.innerHTML = allItems.map((item, idx) => `
         <div class="card ${item.is_bird ? 'bird' : ''}" onclick="openLightbox(${idx})">
+          <button class="card-delete" title="Delete" onclick="event.stopPropagation(); deleteCapture('${item.filename}')">🗑</button>
           <img src="/captures/thumb/${item.filename}" loading="lazy" alt="">
           <div class="overlay">
             ${item.is_bird ? `<div class="species">${item.species.split(' ').pop()} ${item.confidence.toFixed(0)}%</div>` : ''}
@@ -220,6 +247,18 @@
           </div>
         </div>
       `).join('');
+    }
+
+    async function deleteCapture(filename) {
+      if (!confirm('Delete this capture? This cannot be undone.')) return;
+      const res = await fetch(`/api/captures/${filename}`, { method: 'DELETE' });
+      if (!res.ok) { alert('Delete failed'); return; }
+      allItems = allItems.filter(i => i.filename !== filename);
+      renderGrid();
+      const statsEl = document.getElementById('stats');
+      if (statsEl.textContent) {
+        statsEl.textContent = statsEl.textContent.replace(/^\d+/, allItems.length);
+      }
     }
 
     async function loadMore() {
@@ -293,6 +332,15 @@
       if (d.video_exists) document.getElementById('tlLink').style.display = '';
     });
 
+    async function deleteSlowmoClip(ev, filename) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (!confirm('Delete this slow-mo video? This cannot be undone.')) return;
+      const res = await fetch(`/api/slowmo/${filename}`, { method: 'DELETE' });
+      if (!res.ok) { alert('Delete failed'); return; }
+      ev.target.closest('.clip-card').remove();
+    }
+
     // Load slow-mo clips
     fetch('/slowmo').then(r => r.json()).then(videos => {
       if (!videos.length) return;
@@ -300,11 +348,14 @@
       const list = document.getElementById('slowmoList');
       section.style.display = '';
       list.innerHTML = videos.map(v => `
-        <a href="/slowmo/${v.filename}" target="_blank"
-           style="display:flex;align-items:center;gap:8px;background:#2a2a2a;border-radius:6px;padding:8px 12px;text-decoration:none;color:#e0e0e0;font-size:0.8rem;border:1px solid #333">
-          🐦 ${v.timestamp.slice(0,8)} ${v.timestamp.slice(9,15).replace(/(\d{2})(\d{2})(\d{2})/, '$1:$2:$3')}
-          <span style="color:#555">${v.size_mb}MB</span>
-        </a>
+        <div class="clip-card" style="position:relative">
+          <button class="card-delete" title="Delete" onclick="deleteSlowmoClip(event, '${v.filename}')">🗑</button>
+          <a href="/slowmo/${v.filename}" target="_blank"
+             style="display:flex;align-items:center;gap:8px;background:#2a2a2a;border-radius:6px;padding:8px 12px;text-decoration:none;color:#e0e0e0;font-size:0.8rem;border:1px solid #333">
+            🐦 ${v.timestamp.slice(0,8)} ${v.timestamp.slice(9,15).replace(/(\d{2})(\d{2})(\d{2})/, '$1:$2:$3')}
+            <span style="color:#555">${v.size_mb}MB</span>
+          </a>
+        </div>
       `).join('');
     });
 

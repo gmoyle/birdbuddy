@@ -48,6 +48,7 @@
     }
 
     .card {
+      position: relative;
       background: #222;
       border-radius: 10px;
       overflow: hidden;
@@ -55,6 +56,28 @@
       transition: border-color 0.15s;
     }
     .card:hover { border-color: #4caf50; }
+
+    .card-delete {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(198,40,40,0.9);
+      border: none;
+      color: #fff;
+      font-size: 0.9rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.15s, background 0.15s;
+      z-index: 5;
+    }
+    .card:hover .card-delete { opacity: 1; }
+    .card-delete:hover { background: #d32f2f; }
 
     .card video {
       width: 100%;
@@ -108,6 +131,20 @@
       return `${months[parseInt(mo)-1]} ${parseInt(d)}, ${h}:${mi}:${s}`;
     }
 
+    async function deleteSlowmo(filename) {
+      if (!confirm('Delete this slow-mo video? This cannot be undone.')) return;
+      const res = await fetch(`/api/slowmo/${filename}`, { method: 'DELETE' });
+      if (!res.ok) { alert('Delete failed'); return; }
+      const card = document.getElementById(`card-${filename}`);
+      if (card) card.remove();
+      const countEl = document.getElementById('count');
+      const remaining = document.querySelectorAll('.card').length;
+      countEl.textContent = `${remaining} video${remaining !== 1 ? 's' : ''}`;
+      if (remaining === 0) {
+        document.getElementById('content').innerHTML = '<div class="empty">No slow-mo videos yet.<br>They\'re captured automatically when a hummingbird is detected.</div>';
+      }
+    }
+
     fetch('/slowmo').then(r => r.json()).then(videos => {
       const content = document.getElementById('content');
       if (!videos.length) {
@@ -116,7 +153,8 @@
       }
       document.getElementById('count').textContent = `${videos.length} video${videos.length !== 1 ? 's' : ''}`;
       content.innerHTML = `<div class="grid">${videos.map(v => `
-        <div class="card">
+        <div class="card" id="card-${v.filename}">
+          <button class="card-delete" title="Delete" onclick="deleteSlowmo('${v.filename}')">🗑</button>
           <video src="/slowmo/${v.filename}" controls preload="metadata" playsinline></video>
           <div class="card-info">
             <div>

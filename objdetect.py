@@ -138,7 +138,7 @@ def _hailo_detect(image_path, min_confidence):
                                 return True
         return False
     except Exception as e:
-        log.debug(f"Hailo detection error: {e}")
+        log.debug(f"Hailo detection error (fail-open): {type(e).__name__}: {e}")
         return True  # fail open
 
 
