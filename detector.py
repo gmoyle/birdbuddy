@@ -133,20 +133,14 @@ class MotionDetector:
 
                             log.info(f"BIRD DETECTED: {species} ({confidence:.1%}) → {path.name}")
 
-                            if is_hummingbird(species) and not self._slowmo.is_active():
-                                log.info("Hummingbird! Triggering slow-mo capture")
+                            if not self._slowmo.is_active():
+                                log.info("Bird detected! Triggering slow-mo capture")
                                 self._slowmo.capture(species)
-                                threading.Thread(
-                                    target=notify,
-                                    args=(f"{species} (slow-mo capturing!)", confidence, s),
-                                    daemon=True,
-                                ).start()
-                            else:
-                                threading.Thread(
-                                    target=notify,
-                                    args=(species, confidence, s),
-                                    daemon=True,
-                                ).start()
+                            threading.Thread(
+                                target=notify,
+                                args=(species, confidence, s),
+                                daemon=True,
+                            ).start()
                         else:
                             log.debug(f"Motion (no bird/animal, {changed}px), deleting {path.name}")
                             path.unlink(missing_ok=True)
