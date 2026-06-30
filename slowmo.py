@@ -22,6 +22,7 @@ HUMMINGBIRD_SPECIES = {
     "Amazilia yucatanensis",  # Buff-bellied
     "Eugenes fulgens",        # Rivoli's
     "Lampornis clemenciae",   # Blue-throated
+    "Selasphorus platycercus",  # Broad-tailed
 }
 
 CAPTURE_FPS = 120       # target fps during burst
