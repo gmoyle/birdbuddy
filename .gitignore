@@ -10,3 +10,4 @@ models/
 settings.json
 hailort.log
 *.log
+deleted.json

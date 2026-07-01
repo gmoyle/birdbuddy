@@ -146,15 +146,45 @@ CAPTURES_DIR = Path(__file__).parent / "captures"
 LOG_FILE = Path(__file__).parent / "logs" / "birdbuddy.log"
 BIRD_RE = re.compile(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*BIRD DETECTED: (.+?) \((\d+\.\d+)%\) → (motion_\S+\.jpg)")
 
+# Filenames the user has explicitly deleted. Stats and sightings are derived
+# from the log file, which keeps the BIRD DETECTED line even after the image
+# is gone — so we filter these out to keep counts in sync with deletions.
+# (Auto-retention cleanup deliberately does NOT add here, so historical totals
+# survive space-saving cleanup; only explicit user deletes subtract.)
+DELETED_FILE = Path(__file__).parent / "deleted.json"
+_deleted_lock = threading.Lock()
+
+
+def _load_deleted():
+    try:
+        with open(DELETED_FILE) as f:
+            return set(json.load(f))
+    except Exception:
+        return set()
+
+
+def _add_deleted(filename):
+    with _deleted_lock:
+        s = _load_deleted()
+        s.add(filename)
+        try:
+            with open(DELETED_FILE, "w") as f:
+                json.dump(sorted(s), f)
+        except Exception as e:
+            log.warning(f"Failed to record deleted file {filename}: {e}")
+
 
 @app.route("/sightings")
 def sightings():
     entries = []
+    deleted = _load_deleted()
     if LOG_FILE.exists():
         for line in LOG_FILE.read_text().splitlines():
             m = BIRD_RE.search(line)
             if m:
                 ts, species, confidence, filename = m.groups()
+                if filename in deleted:
+                    continue
                 entries.append({
                     "timestamp": ts,
                     "species": species,
@@ -202,6 +232,7 @@ def delete_capture(filename):
         abort(404)
     path.unlink()
     (THUMBS_DIR / filename).unlink(missing_ok=True)
+    _add_deleted(filename)
     log.info(f"Deleted capture: {filename}")
     return jsonify({"ok": True})
 
@@ -277,12 +308,15 @@ def stats_page():
 @app.route("/api/stats")
 def api_stats():
     entries = []
+    deleted = _load_deleted()
     today = datetime.now().date()
     if LOG_FILE.exists():
         for line in LOG_FILE.read_text().splitlines():
             m = BIRD_RE.search(line)
             if m:
                 ts, species, confidence, filename = m.groups()
+                if filename in deleted:
+                    continue
                 entries.append({"ts": datetime.strptime(ts, "%Y-%m-%d %H:%M:%S"), "species": species})
 
     species_counts = Counter(e["species"] for e in entries)
