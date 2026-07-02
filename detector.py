@@ -9,7 +9,7 @@ from pathlib import Path
 from PIL import Image
 
 from classify import load_interpreter, load_labels, classify_image
-from slowmo import SlowMoCapture, is_hummingbird
+from slowmo import SlowMoCapture
 from daynight import is_daytime
 from objdetect import contains_bird
 
@@ -193,9 +193,12 @@ class MotionDetector:
                         confidence = result["confidence"]
                         min_confidence = s.get("confidence_threshold", 30) / 100.0
 
-                        # Always keep hummingbirds regardless of confidence — they're small
-                        # and fast so the still is often blurry; better a false-positive slow-mo
-                        if confidence < min_confidence and not is_hummingbird(species):
+                        # The confidence slider gates ALL species. (There used
+                        # to be a keep-hummingbirds-at-any-confidence bypass
+                        # here; it flooded sightings with sub-15% "anna" hits
+                        # on empty frames, silently overriding the user's
+                        # threshold.)
+                        if confidence < min_confidence:
                             log.debug(f"Bird below confidence threshold ({confidence:.1%} < {min_confidence:.1%}), deleting {path.name}")
                             path.unlink(missing_ok=True)
                             self._last_saved_path = None
