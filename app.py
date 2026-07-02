@@ -15,7 +15,6 @@ from detector import MotionDetector
 from timelapse import TimelapseCapturer, build_video, TIMELAPSE_DIR
 from slowmo import SLOWMO_DIR, is_capturing
 from cleanup import DiskCleaner, disk_usage
-from daynight import DayNightManager
 from backup import BackupScheduler, run_backup
 from verify_slowmo import SlowMoVerifier
 
@@ -123,7 +122,6 @@ def clients_active():
 _detector = MotionDetector(_camera, lambda: _settings, clients_active=clients_active)
 _timelapse = TimelapseCapturer(_camera, lambda: _settings)
 _cleaner = DiskCleaner(lambda: _settings)
-_daynight = DayNightManager(_camera, lambda: _settings)
 _backup = BackupScheduler(lambda: _settings)
 _slowmo_verifier = SlowMoVerifier(lambda: _settings, clients_active=clients_active, set_maintenance=set_maintenance)
 _camera.start()
@@ -133,7 +131,6 @@ if _camera1.available:
 _detector.start()
 _timelapse.start()
 _cleaner.start()
-_daynight.start()
 _backup.start()
 _slowmo_verifier.start()
 log.info("Camera ready — http://birdbuddy.local:8080/")
@@ -231,26 +228,52 @@ def _add_deleted(filename):
             log.warning(f"Failed to record deleted file {filename}: {e}")
 
 
-@app.route("/sightings")
-def sightings():
-    entries = []
-    deleted = _load_deleted()
-    if LOG_FILE.exists():
-        for line in LOG_FILE.read_text().splitlines():
+# Cache of parsed BIRD DETECTED log entries, keyed on the log file's
+# (mtime, size) so it re-parses only when the log actually changes —
+# /sightings, /api/stats, and /api/captures no longer re-read the whole
+# log on every request.
+_log_cache = {"key": None, "entries": []}
+_log_cache_lock = threading.Lock()
+
+
+def _get_log_entries():
+    try:
+        st = LOG_FILE.stat()
+        key = (st.st_mtime_ns, st.st_size)
+    except FileNotFoundError:
+        return []
+    with _log_cache_lock:
+        if _log_cache["key"] == key:
+            return _log_cache["entries"]
+        entries = []
+        for line in LOG_FILE.read_text(errors="ignore").splitlines():
             m = BIRD_RE.search(line)
             if m:
                 ts, species, confidence, filename = m.groups()
-                if filename in deleted:
-                    continue
                 entries.append({
-                    "timestamp": ts,
+                    "dt": datetime.strptime(ts, "%Y-%m-%d %H:%M:%S"),
                     "species": species,
                     "confidence": float(confidence),
                     "filename": filename,
-                    "has_image": (CAPTURES_DIR / filename).exists(),
                 })
-    # Most recent first, cap at 50
-    return jsonify(list(reversed(entries))[:50])
+        _log_cache["key"] = key
+        _log_cache["entries"] = entries
+        return entries
+
+
+@app.route("/sightings")
+def sightings():
+    deleted = _load_deleted()
+    recent = [e for e in _get_log_entries() if e["filename"] not in deleted]
+    # Most recent first, cap at 50 (check has_image only on the page we return)
+    recent = list(reversed(recent))[:50]
+    return jsonify([{
+        "timestamp": e["dt"].strftime("%Y-%m-%d %H:%M:%S"),
+        "species": e["species"],
+        "confidence": e["confidence"],
+        "filename": e["filename"],
+        "has_image": (CAPTURES_DIR / e["filename"]).exists(),
+    } for e in recent])
 
 
 @app.route("/captures/<filename>")
@@ -316,14 +339,10 @@ def api_captures():
     per_page = 48
     filter_type = request.args.get("filter", "all")  # "all", "bird", "motion"
 
-    # Build bird sightings index from log for labelling
+    # Bird sightings index for labelling (cached log parse)
     bird_index = {}
-    if LOG_FILE.exists():
-        for line in LOG_FILE.read_text().splitlines():
-            m = BIRD_RE.search(line)
-            if m:
-                ts, species, confidence, filename = m.groups()
-                bird_index[filename] = {"species": species, "confidence": float(confidence)}
+    for e in _get_log_entries():
+        bird_index[e["filename"]] = {"species": e["species"], "confidence": e["confidence"]}
 
     all_files = sorted(CAPTURES_DIR.glob("*.jpg"), reverse=True)
 
@@ -364,17 +383,10 @@ def stats_page():
 
 @app.route("/api/stats")
 def api_stats():
-    entries = []
     deleted = _load_deleted()
     today = datetime.now().date()
-    if LOG_FILE.exists():
-        for line in LOG_FILE.read_text().splitlines():
-            m = BIRD_RE.search(line)
-            if m:
-                ts, species, confidence, filename = m.groups()
-                if filename in deleted:
-                    continue
-                entries.append({"ts": datetime.strptime(ts, "%Y-%m-%d %H:%M:%S"), "species": species})
+    entries = [{"ts": e["dt"], "species": e["species"]}
+               for e in _get_log_entries() if e["filename"] not in deleted]
 
     species_counts = Counter(e["species"] for e in entries)
     top_species = [{"species": s, "count": c} for s, c in species_counts.most_common(20)]

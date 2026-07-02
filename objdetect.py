@@ -33,6 +33,11 @@ _COCO_LABELS = {
 
 _backend = None
 _hailo_infer = None
+# Keeps the VDevice (and HEF) alive for the process lifetime. Without this,
+# `target` in _init_hailo is garbage-collected when the function returns —
+# the closure only captures network_group — which releases the device and
+# makes every subsequent inference fail with HailoRTStatusException: 8.
+_hailo_keepalive = None
 _tflite_interp = None
 _tflite_labels = None
 
@@ -49,7 +54,7 @@ def _find_hef():
 
 
 def _init_hailo(hef_path):
-    global _hailo_infer
+    global _hailo_infer, _hailo_keepalive
     try:
         from hailo_platform import (HEF, VDevice, HailoStreamInterface,
             InferVStreams, ConfigureParams, InputVStreamParams,
@@ -73,6 +78,7 @@ def _init_hailo(hef_path):
                 with network_group.activate(network_group_params):
                     return pipeline.infer(data)
 
+        _hailo_keepalive = (target, hef)
         _hailo_infer = (infer, w, h)
         log.info(f"Hailo-8L object detection ready: {Path(hef_path).name} ({w}x{h})")
         return True
@@ -110,7 +116,7 @@ def _init():
         _backend = "passthrough"
 
 
-def contains_bird(image_path, min_confidence=0.4):
+def contains_bird(image_path, min_confidence=0.3):
     global _backend
     if _backend is None:
         _init()
@@ -127,7 +133,18 @@ def _hailo_detect(image_path, min_confidence):
         outputs = infer_fn(image_path)
         for key, tensor in outputs.items():
             arr = tensor[0]
-            if arr.ndim == 2:
+            # NMS-postprocessed HEF (yolov8s_h8l): a list with one entry per
+            # COCO class, each an (N, 5) array of [y1, x1, y2, x2, score].
+            if isinstance(arr, list):
+                for cls_id, dets in enumerate(arr):
+                    label = _COCO_LABELS.get(cls_id, "")
+                    if label not in ANIMAL_CLASSES:
+                        continue
+                    for det in dets:
+                        if float(det[4]) >= min_confidence:
+                            return True
+            # Raw (no-NMS) HEF: flat (N, 6) array of [x1, y1, x2, y2, conf, cls]
+            elif hasattr(arr, "ndim") and arr.ndim == 2:
                 for det in arr:
                     if len(det) >= 6:
                         conf = float(det[4])

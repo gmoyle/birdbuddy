@@ -5,6 +5,8 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
+from daynight import is_daytime
+
 TIMELAPSE_DIR = Path(__file__).parent / "timelapse"
 TIMELAPSE_DIR.mkdir(exist_ok=True)
 
@@ -31,7 +33,9 @@ class TimelapseCapturer:
         while not self._stop.is_set():
             s = self.get_settings()
             interval_mins = s.get("timelapse_interval", 0)
-            if interval_mins > 0:
+            lat, lon = s.get("latitude"), s.get("longitude")
+            is_day = is_daytime(lat, lon) if (lat is not None and lon is not None) else True
+            if interval_mins > 0 and is_day:
                 now = time.time()
                 if now - last_capture >= interval_mins * 60:
                     ts = datetime.now().strftime("%Y%m%d_%H%M%S")

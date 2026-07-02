@@ -1,10 +1,13 @@
-import math
-import time
-import logging
-import threading
-from datetime import datetime, timezone, timedelta
+"""Solar day/night calculation.
 
-log = logging.getLogger("birdbuddy")
+The camera has no IR/low-light capability, so nothing is captured at night —
+the motion detector and timelapse both pause outside daylight hours using
+is_daytime(). (The old DayNightManager that switched camera gain at night is
+gone: night captures were useless, and its unsynchronized camera-control
+writes were a concurrency hazard.)
+"""
+import math
+from datetime import datetime, timedelta
 
 
 def solar_times(lat, lon, date=None):
@@ -42,58 +45,3 @@ def is_daytime(lat, lon):
     sunrise, sunset = solar_times(lat, lon)
     now = datetime.now()
     return sunrise <= now <= sunset
-
-
-class DayNightManager:
-    def __init__(self, camera, get_settings):
-        self.camera = camera
-        self.get_settings = get_settings
-        self._thread = None
-        self._stop = threading.Event()
-        self._current_mode = None
-
-    def start(self):
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, daemon=True)
-        self._thread.start()
-
-    def stop(self):
-        self._stop.set()
-
-    def _loop(self):
-        while not self._stop.is_set():
-            s = self.get_settings()
-            lat = s.get("latitude")
-            lon = s.get("longitude")
-
-            if lat is not None and lon is not None:
-                day = is_daytime(lat, lon)
-                mode = "day" if day else "night"
-
-                if mode != self._current_mode:
-                    self._current_mode = mode
-                    if not self.camera.available:
-                            pass
-                    elif mode == "night":
-                        log.info("Switching to night mode (low-light)")
-                        # Hold the camera lock: a bare set_controls racing a
-                        # slow-mo reconfigure is the same driver-level hazard
-                        # that used to hang the whole board.
-                        with self.camera.cam_lock:
-                            self.camera.cam.set_controls({
-                                "AeExposureMode": 1,
-                                "AnalogueGain": 8.0,
-                                "FrameDurationLimits": (100000, 500000),
-                            })
-                    else:
-                        log.info("Switching to day mode")
-                        with self.camera.cam_lock:
-                            self.camera.cam.set_controls({
-                                "AeExposureMode": 0,
-                                "AnalogueGain": 1.0,
-                                "FrameDurationLimits": (33333, 33333),
-                            })
-                        self.camera.apply_settings(s)
-
-            # Check every 5 minutes
-            self._stop.wait(300)

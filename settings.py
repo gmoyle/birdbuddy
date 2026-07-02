@@ -21,7 +21,6 @@ DEFAULTS = {
     "retention_days": 30,          # 0 = keep forever
     "latitude": None,              # for day/night mode
     "longitude": None,
-    "weather_overlay": False,      # stamp temp/conditions on captures
     "backup_path": "",             # rsync destination, e.g. user@nas:/backups/birds
     "backup_interval": 0,          # hours between backups, 0 = disabled
 }

@@ -10,7 +10,7 @@ from PIL import Image
 
 from classify import load_interpreter, load_labels, classify_image
 from slowmo import SlowMoCapture, is_hummingbird
-from weather import stamp_weather
+from daynight import is_daytime
 from objdetect import contains_bird
 
 CAPTURES_DIR = Path(__file__).parent / "captures"
@@ -75,6 +75,8 @@ class MotionDetector:
         self._slowmo = SlowMoCapture(camera)
         self._last_saved_path = None
         self._started_at = 0
+        self._is_day = True
+        self._next_day_check = 0
         self._status_lock = threading.Lock()
         self._status = {
             "changed_px": 0,
@@ -127,6 +129,21 @@ class MotionDetector:
                     prev_gray = None
                     continue
 
+                # No captures at night — this camera has no IR/low-light
+                # capability, so night frames are useless. Re-check once a
+                # minute; wait in short chunks so shutdown stays responsive.
+                s = self.get_settings()
+                if s.get("latitude") is not None and s.get("longitude") is not None:
+                    now = time.time()
+                    if now >= self._next_day_check:
+                        self._is_day = is_daytime(s["latitude"], s["longitude"])
+                        self._next_day_check = now + 60
+                    if not self._is_day:
+                        self._set_status(last_event="night_pause")
+                        prev_gray = None
+                        self._stop_event.wait(30)
+                        continue
+
                 prev_gray, last_capture = self._tick(prev_gray, last_capture)
             except Exception as e:
                 # Never let an unexpected error (e.g. the camera briefly
@@ -169,10 +186,6 @@ class MotionDetector:
                         self._last_saved_path = None
                         self._set_status(last_event="no_animal", last_event_at=now)
                         return gray, last_capture
-
-                    # Weather overlay (stamp before classification so it appears in saved image)
-                    if s.get("weather_overlay") and s.get("latitude") and s.get("longitude"):
-                        stamp_weather(path, s["latitude"], s["longitude"])
 
                     result = classify_image(path, self._interp, self._labels)
                     if result["is_bird"]:
