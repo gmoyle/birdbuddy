@@ -5,7 +5,6 @@ from ai_edge_litert.interpreter import Interpreter
 
 MODEL_PATH = Path(__file__).parent / "models" / "birds_classifier.tflite"
 LABELS_PATH = Path(__file__).parent / "models" / "birds_labels.csv"
-CONFIDENCE_THRESHOLD = 0.3
 
 
 def load_labels():

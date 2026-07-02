@@ -32,7 +32,7 @@ def notify(species, confidence, settings):
         headers = {
             "Title": "BirdBuddy",
             "Tags": "bird",
-            "Actions": "view, View capture, http://192.168.0.83:8080/, clear=true",
+            "Actions": "view, View capture, http://birdbuddy.local:8080/, clear=true",
         }
         user = settings.get("ntfy_user", "").strip()
         passwd = settings.get("ntfy_pass", "").strip()

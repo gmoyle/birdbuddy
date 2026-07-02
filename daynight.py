@@ -76,18 +76,23 @@ class DayNightManager:
                             pass
                     elif mode == "night":
                         log.info("Switching to night mode (low-light)")
-                        self.camera.cam.set_controls({
-                            "AeExposureMode": 1,
-                            "AnalogueGain": 8.0,
-                            "FrameDurationLimits": (100000, 500000),
-                        })
+                        # Hold the camera lock: a bare set_controls racing a
+                        # slow-mo reconfigure is the same driver-level hazard
+                        # that used to hang the whole board.
+                        with self.camera.cam_lock:
+                            self.camera.cam.set_controls({
+                                "AeExposureMode": 1,
+                                "AnalogueGain": 8.0,
+                                "FrameDurationLimits": (100000, 500000),
+                            })
                     else:
                         log.info("Switching to day mode")
-                        self.camera.cam.set_controls({
-                            "AeExposureMode": 0,
-                            "AnalogueGain": 1.0,
-                            "FrameDurationLimits": (33333, 33333),
-                        })
+                        with self.camera.cam_lock:
+                            self.camera.cam.set_controls({
+                                "AeExposureMode": 0,
+                                "AnalogueGain": 1.0,
+                                "FrameDurationLimits": (33333, 33333),
+                            })
                         self.camera.apply_settings(s)
 
             # Check every 5 minutes

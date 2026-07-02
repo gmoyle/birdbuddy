@@ -15,11 +15,14 @@ def run_backup(destination):
     """rsync captures, slowmo, and timelapse to destination (user@host:/path or /local/path)."""
     if not destination.strip():
         return False, "No backup destination configured"
+    # No trailing slashes on sources: rsync then creates captures/, slowmo/,
+    # and timelapse/ subdirectories at the destination. (With trailing slashes
+    # it merges the *contents* of all three flat into one folder.)
     cmd = [
         "rsync", "-av", "--ignore-existing",
-        str(CAPTURES_DIR) + "/",
-        str(SLOWMO_DIR) + "/",
-        str(TIMELAPSE_DIR) + "/",
+        str(CAPTURES_DIR),
+        str(SLOWMO_DIR),
+        str(TIMELAPSE_DIR),
         destination.rstrip("/") + "/",
     ]
     try:

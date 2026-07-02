@@ -5,7 +5,7 @@ Slow-mo bursts fire on any bird detection, so the folder fills with false
 triggers (wind, chains, low-confidence misclassifications). This samples a few
 frames from each video, runs the TFLite species classifier (the Hailo NPU path
 is currently non-functional), and quarantines any video where no confident
-hummingbird appears — moving it to slowmo/rejected/ rather than deleting, so
+bird of any species appears — moving it to slowmo/rejected/ rather than deleting, so
 nothing is lost.
 
 Deliberately gentle: single-threaded TFLite + ffmpeg and a throttle between
@@ -22,7 +22,7 @@ from pathlib import Path
 from datetime import datetime
 
 from classify import load_interpreter, load_labels, classify_image
-from slowmo import is_hummingbird, SLOWMO_DIR
+from slowmo import SLOWMO_DIR
 
 REJECTED_DIR = SLOWMO_DIR / "rejected"
 log = logging.getLogger("birdbuddy")
@@ -77,7 +77,7 @@ def _extract_frame(video, t, out):
 
 
 def verify_video(video, interp, labels, min_conf):
-    """Return (is_hummingbird_found, best_result_dict)."""
+    """Return (bird_found, best_result_dict). Keeps any confident bird."""
     dur = _video_duration(video)
     best = {"species": None, "confidence": 0.0}
     tmp = SLOWMO_DIR / ("_verify_" + video.stem + ".jpg")
@@ -94,7 +94,11 @@ def verify_video(video, interp, labels, min_conf):
             if r and r.get("species"):
                 if r["confidence"] > best["confidence"]:
                     best = {"species": r["species"], "confidence": r["confidence"]}
-                if is_hummingbird(r["species"]) and r["confidence"] >= min_conf:
+                # Keep on ANY confident bird, not just hummingbirds — species
+                # IDs on motion-blurred slow-mo frames are unreliable, and a
+                # misidentified bird is still a bird. Only true non-bird
+                # (background) clips should be culled.
+                if r.get("is_bird") and r["confidence"] >= min_conf:
                     found = True
                     break
     finally:
